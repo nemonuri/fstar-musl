@@ -1,4 +1,5 @@
 
 class MetaConfig {
-    [string]$fileName = '.root-config'
+    [string]$rootConfigfileName = '.root-config'
+    [string]$fstConfigFileName = '.fst.config.json'
 }

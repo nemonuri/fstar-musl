@@ -2,6 +2,7 @@
 . $PSScriptRoot/metaConfig.ps1
 . $PSScriptRoot/rootConfig.ps1
 . $PSScriptRoot/dsc.ps1
+. $PSScriptRoot/fstConfig.ps1
 
 function Test-Windows {
     [OutputType([bool])] param()
@@ -18,4 +19,8 @@ function Format-Exe {
     } else {
         [System.IO.Path]::ChangeExtension($ExePath, $null)
     }
+}
+
+function Write-HostWithTime([string] $Text) {
+    Write-Host "[$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssz')] $Text"
 }

@@ -1,12 +1,22 @@
 
+[CmdletBinding()]
+param (
+    [ValidateSet('Test', 'Set')][string] $Mode = 'Set',
+    [switch] $PassThru
+)
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Off
 
 . $PSScriptRoot/internal/all.ps1
 
 #--- functions ---
-function Write-HostWithTime([string] $Text) {
-    Write-Host "[$(Get-Date -Format 'yyyyMMddTHHmmssz')] $Text"
+function Out-Result([psobject] $InputObject) {
+    if ($PassThru) {
+        return $InputObject
+    } else {
+        ConvertTo-Json $InputObject | Write-Host
+    }
 }
 #---|
 
@@ -14,16 +24,16 @@ $cfg = [MetaConfig]::new()
 
 $rootPath = Join-Path $PSScriptRoot ".." -Resolve
 
-$rootConfigPath = Join-Path $rootPath $cfg.fileName
+$rootConfigPath = Join-Path $rootPath $cfg.rootConfigfileName
 
 #--- test and set root config file ---
-Write-HostWithTime "Test File"
+Write-HostWithTime "Test $($cfg.rootConfigfileName)"
 $testOutput = Invoke-DscTest (New-DesiredRootConfigState) (ConvertTo-RootConfigState $rootConfigPath)
-ConvertTo-Json $testOutput | Write-Host
+Out-Result $testOutput
 
-if (-not $testOutput.inDesiredState) {
-    Write-HostWithTime "Set File"
+if (($Mode -eq 'Set') -and (-not $testOutput.inDesiredState)) {
+    Write-HostWithTime "Set $($cfg.rootConfigfileName)"
     $setOutput = New-DscSetOutput (New-DesiredRootConfigState) (Set-DesiredRootConfigState $rootConfigPath)
-    ConvertTo-Json $setOutput | Write-Host
+    Out-Result $setOutput 
 }
 #---|
