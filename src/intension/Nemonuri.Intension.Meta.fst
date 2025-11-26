@@ -31,41 +31,65 @@ module Nemonuri.Intension.Meta
 ## 예시: Atomic compare and swap (a_cas)
 *)
 
+module U = FStar.UInt
 module U32 = FStar.UInt32
 open FStar.FunctionalExtensionality
 module F = FStar.FunctionalExtensionality
 module Seq = FStar.Seq
 
-type addr_t = U32.t
+type bit_width_t = nat
 
-type stream_t (n:nat) = nat ^-> U32.t
+type lifted_t (a_t:Type) = 
+| Value: (v:a_t) -> lifted_t a_t
+| Poison (* Bottom *)
 
-type cell_t =
-| Value of U32.t
-| Poison
+type addr_t (bw:bit_width_t) : eqtype = lifted_t (U.uint_t bw)
 
-type heap_t = Seq.seq cell_t
+type stream_t (bw:bit_width_t) = nat ^-> (U.uint_t bw)
 
-let size (heap:heap_t) : nat = Seq.length heap
+type cell_t (a_t:Type) = lifted_t a_t
 
-let select (addr:addr_t) (heap:heap_t) : cell_t =
-  let addr_nat = U32.v addr in
-  match addr_nat < (size heap) with
-  | true -> Seq.index heap addr_nat
-  | false -> Poison
+noeq
+type config_t = {
+  bit_width: bit_width_t;
+  stream: stream_t bit_width;
+}
+
+let to_addr_type (cfg:config_t) = addr_t cfg.bit_width
+let to_cell_value_type (cfg:config_t) = (U.uint_t cfg.bit_width)
+let to_cell_type (cfg:config_t) = (cell_t (to_cell_value_type cfg))
+
+let select0 (cfg:config_t) (n:nat) (addr:(to_addr_type cfg)) : (to_cell_type cfg) =
+  match addr with
+  | Value _ -> cfg.stream n |> Value
+  | Poison -> Poison
    
-let extend (goal_size:nat) (heap:heap_t) 
-  : Tot (x:heap_t{goal_size <= (size x)}) =
-  match goal_size <= (size heap) with
-  | true -> heap
-  | false -> 
+let update0 (cfg:config_t) (addr:(to_addr_type cfg)) (cell:(to_cell_type cfg)) : unit = ()
+
+(*
+Reference:
+- https://github.com/bminor/musl/blob/v1.2.5/src/internal/atomic.h
+- https://en.wikipedia.org/wiki/Compare-and-swap#Implementation_in_C
+*)
+let rec a_cas0 
+  (cfg:config_t) (n:nat) 
+  (addr:(to_addr_type cfg)) 
+  (expected:(to_cell_value_type cfg))
+  (source:(to_cell_value_type cfg))
+  : Dv (to_cell_type cfg) 
+  =
+  match addr with
+  | Poison -> Poison
+  | Value _ -> 
   begin
-    let size_diff: pos = goal_size - (size heap) in
-    let right_heap: heap_t = Seq.create size_diff Poison in
-    Seq.append heap right_heap
+    let old = select0 cfg n addr in
+    if old = Value expected then
+    begin
+      update0 cfg addr (Value source); (* Try store *)
+      let cur = select0 cfg (n+1) addr in
+      if cur = Value source then old (* Check store successed *)
+        else a_cas0 cfg (n+2) addr expected source (* Recursion *)
+    end
+    else old
   end
-
-//let update (addr:addr_t) (heap:heap_t) : (heap)
-  
-
 
