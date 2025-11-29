@@ -28,7 +28,7 @@ module Nemonuri.Intension.Meta
 
 - 그래서 나는 대안으로 프로그램의 '내포적 의미 검증'을 제안한다.
 
-## 예시: Atomic compare and swap (a_cas)
+## 예시: Atomic compare and swap
 *)
 
 module U = FStar.UInt
@@ -42,6 +42,10 @@ type bit_width_t = nat
 type lifted_t (a_t:Type) = 
 | Value: (v:a_t) -> lifted_t a_t
 | Poison (* Bottom *)
+
+let lift #a_t (a:a_t) : lifted_t a_t = Value a
+
+let to_value #a_t (a:lifted_t a_t{Value? a}) : a_t = Value?.v a
 
 type addr_t (bw:bit_width_t) : eqtype = lifted_t (U.uint_t bw)
 
@@ -59,37 +63,53 @@ let to_addr_type (cfg:config_t) = addr_t cfg.bit_width
 let to_cell_value_type (cfg:config_t) = (U.uint_t cfg.bit_width)
 let to_cell_type (cfg:config_t) = (cell_t (to_cell_value_type cfg))
 
-let select0 (cfg:config_t) (n:nat) (addr:(to_addr_type cfg)) : (to_cell_type cfg) =
+let load (cfg:config_t) (n:nat) (addr:(to_addr_type cfg)) : (to_cell_type cfg) =
   match addr with
-  | Value _ -> cfg.stream n |> Value
+  | Value _ -> cfg.stream n |> lift
   | Poison -> Poison
    
-let update0 (cfg:config_t) (addr:(to_addr_type cfg)) (cell:(to_cell_type cfg)) : unit = ()
+let store (cfg:config_t) (n:nat) (addr:(to_addr_type cfg)) (desired:(to_cell_value_type cfg)) 
+  : (to_cell_type cfg) = 
+  match addr with
+  | Value _ -> cfg.stream n |> lift
+  | Poison -> Poison
+
+let store_and_check (cfg:config_t) (n:nat) (addr:(to_addr_type cfg)) (desired:(to_cell_value_type cfg)) 
+  : (to_cell_type cfg & bool) = 
+  match store cfg n addr desired with
+  | Value v -> (lift v, v = desired)
+  | Poison -> (Poison, false)
 
 (*
 Reference:
 - https://github.com/bminor/musl/blob/v1.2.5/src/internal/atomic.h
 - https://en.wikipedia.org/wiki/Compare-and-swap#Implementation_in_C
+- https://developer.arm.com/documentation/dui0588/a/arm-and-thumb-instructions/memory-access-instructions/ldrex-and-strex
+- https://en.wikipedia.org/wiki/Do_while_loop
 *)
-let rec a_cas0 
+private let rec compare_and_swap_core'
+  (cfg:config_t) (n:nat) 
+  (addr:(to_addr_type cfg){Value? addr}) 
+  (expected:(to_cell_value_type cfg))
+  (desired:(to_cell_value_type cfg))
+  : Dv (to_cell_value_type cfg)
+  =
+  let old_value = to_value (load cfg n addr) in
+  match old_value = expected with
+  | false -> old_value
+  | true -> 
+  match store_and_check cfg (n+1) addr desired with
+  | (Value _, true) -> old_value
+  | (Value _, false) -> compare_and_swap_core' cfg (n+2) addr expected desired
+
+let compare_and_swap 
   (cfg:config_t) (n:nat) 
   (addr:(to_addr_type cfg)) 
   (expected:(to_cell_value_type cfg))
-  (source:(to_cell_value_type cfg))
-  : Dv (to_cell_type cfg) 
+  (desired:(to_cell_value_type cfg))
+  : Dv (to_cell_type cfg)
   =
   match addr with
   | Poison -> Poison
-  | Value _ -> 
-  begin
-    let old = select0 cfg n addr in
-    if old = Value expected then
-    begin
-      update0 cfg addr (Value source); (* Try store *)
-      let cur = select0 cfg (n+1) addr in
-      if cur = Value source then old (* Check store successed *)
-        else a_cas0 cfg (n+2) addr expected source (* Recursion *)
-    end
-    else old
-  end
+  | Value old -> compare_and_swap_core' cfg n addr expected desired |> lift
 

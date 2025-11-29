@@ -1,0 +1,54 @@
+유사 정규 문법으로 표현해보자...!
+
+A1 →《 ._1 = Load ∧ ._2 = expected 》     // if then
+A1 →《 ._1 = Load ∧ ._2 <> expected 》A2  // else
+A2 →《 ._1 = Store ∧ ._2 = desired 》     // if then
+A2 →《 ._1 = Store ∧ ._2 <> desired 》A1  // else
+
+A1 →《 Load, = expected 》   // if then
+A1 →《 Load, <> expected 》A2  // else
+A2 →《 Store, = desired 》   // if then
+A2 →《 Store, <> desired 》A1  // else
+
+
+이걸 정규 표현식으로 바꾸어보면
+
+A1 → a 
+A1 → b A2
+A2 → c 
+A2 → d A1
+
+https://stackoverflow.com/questions/8898049/how-to-convert-a-regular-grammar-to-regular-expression
+
+A1 → a | b A2
+A2 → c | d A1
+
+A2 → c | d (a | b A2)
+
+A2 → c | d a | d b A2
+
+A2 → c | d a | (d b)+ (c | d a)
+
+
+잠깐. 시작 심볼은 A1 이잖아.
+
+A1 → a | b (c | d A1)
+
+A1 → a | b c | b d A1
+
+A1 → (a | b c) | (b d)+ (a | b c)
+
+A1 → 《 Load, = expected 》|《 Load, <> expected 》《 Store, = desired 》
+      | (《 Load, <> expected 》《 Store, <> desired 》)+ (《 Load, = expected 》|《 Load, <> expected 》《 Store, = desired 》)
+
+A1 → 
+ 《 Load, = expected 》
+|《 Load, <> expected 》《 Store, = desired 》
+| (《 Load, <> expected 》《 Store, <> desired 》)+ 《 Load, = expected 》
+| (《 Load, <> expected 》《 Store, <> desired 》)+ 《 Load, <> expected 》《 Store, = desired 》
+
+A1 → (《 Load, <> expected 》《 Store, <> desired 》)* (《 Load, = expected 》|《 Load, <> expected 》《 Store, = desired 》)
+
+생각해보니 이거, 'addr'도 포함되어야 하는 거 아닌가?
+
+A1 → (《 Load, addr, <> expected 》《 Store, addr, <> desired 》)* (《 Load, addr, = expected 》|《 Load, addr, <> expected 》《 Store, addr, = desired 》)

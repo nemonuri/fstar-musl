@@ -5,19 +5,19 @@ Set-StrictMode -Off
 . $PSScriptRoot/internal/all.ps1
 
 # meta-config
-$cfg = [MetaConfig]::new()
+$meta = Get-Meta
 
 #--- Test root config ---
 [TestSimpleOutput]$testOutput = & $PSScriptRoot/Set-RootConfig.ps1 -Mode 'Test' -PassThru
 if ($testOutput.inDesiredState -ne $true) {
-    Write-Error "Test $($cfg.rootConfigfileName) failed. Run Set-RootConfig.ps1 first."
+    Write-Error "Test $($meta.RootConfig) failed. Run Set-RootConfig.ps1 first."
     exit 1
 } else {
-    Write-HostWithTime "Test $($cfg.rootConfigfileName) passed."
+    Write-HostWithTime "Test $($meta.RootConfig) passed."
 }
 #---|
 
-$rc = Get-Content -Path (Join-Path $PSScriptRoot '..' $cfg.rootConfigfileName) | ConvertFrom-Json
+$rc = Get-Content -Path (Join-Path $PSScriptRoot '..' $meta.RootConfig) | ConvertFrom-Json
 
 #--- Validate root config ---
 class RootConfigInfo {
@@ -57,15 +57,15 @@ function Confirm-RootConfig {
 } 
 
 if (-not (Confirm-RootConfig).inDesiredState) {
-    Write-Error "Confirm $($cfg.rootConfigfileName) failed."
+    Write-Error "Confirm $($meta.RootConfig) failed."
     exit 1
 } else {
-    Write-HostWithTime "Confirm $($cfg.rootConfigfileName) passed."
+    Write-HostWithTime "Confirm $($meta.RootConfig) passed."
 }
 #---|
 
 #--- set fst.config.json ---
-Write-HostWithTime "Set $($cfg.fstConfigFileName)"
+Write-HostWithTime "Set $($meta.FstConfig)"
 
 $fc = [FstConfig]@{
     fstar_exe = $rc.fstarExe
@@ -73,5 +73,5 @@ $fc = [FstConfig]@{
     include_dirs = $rc.fstarLibs
 }
 
-$fc | ConvertTo-Json | Out-File -FilePath (Join-Path $PSScriptRoot '..' $cfg.fstConfigFileName)
+$fc | ConvertTo-Json | Out-File -FilePath (Join-Path $PSScriptRoot '..' $meta.FstConfig)
 #---|

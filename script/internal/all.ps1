@@ -24,3 +24,7 @@ function Format-Exe {
 function Write-HostWithTime([string] $Text) {
     Write-Host "[$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssz')] $Text"
 }
+
+function Get-Meta {
+    Import-PowerShellDataFile "$PSScriptRoot/data/meta.psd1"
+}
