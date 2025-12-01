@@ -118,8 +118,16 @@ let lemma_length_0 #a_t (binrel:t a_t) (seq:S.seq a_t{S.length seq == 0}) : Lemm
   })
 
 let lemma_singleton #a_t (binrel:t a_t) (a:a_t) : Lemma (is_sorted binrel (S.singleton a)) = ()
+let lemma_singleton_seq #a_t (binrel:t a_t) (seq:S.seq a_t{S.length seq = 1}) : Lemma (is_sorted binrel seq) = ()
 
 let compare_head #a_t (binrel:t a_t) (a:a_t) (seq:S.seq a_t) : prop = (S.length seq > 0) ==> (binrel a (S.head seq))
+
+let lemma_cons_tail #a_t (a:a_t) (seq:S.seq a_t)
+  : Lemma (S.tail (S.cons a seq) == seq) =
+  S.append_slices (S.singleton a) seq;
+  let seq2 = (S.tail (S.cons a seq)) in
+  assert (S.equal seq2 seq);
+  S.lemma_eq_elim seq2 seq
 
 let lemma_tail #a_t (binrel:t a_t) (seq:S.seq a_t{S.length seq > 0})
   : Lemma (requires (is_sorted binrel seq)) 
@@ -136,19 +144,12 @@ let lemma_tail #a_t (binrel:t a_t) (seq:S.seq a_t{S.length seq > 0})
     assert (is_sorted binrel tail_seq)
   end
 
-let lemma_cons_tail #a_t (a:a_t) (seq:S.seq a_t)
-  : Lemma (S.tail (S.cons a seq) == seq) =
-  S.append_slices (S.singleton a) seq;
-  let seq2 = (S.tail (S.cons a seq)) in
-  assert (S.equal seq2 seq);
-  S.lemma_eq_elim seq2 seq
-
 val lemma_cons #a_t (binrel:t a_t) (a:a_t) (seq:S.seq a_t)
   : Lemma (requires (is_sorted binrel seq) /\ (compare_head binrel a seq))
-          (ensures (is_sorted binrel (S.cons a seq)))  
-          (decreases S.length seq)
-let rec lemma_cons #a_t (binrel:t a_t) (a:a_t) (seq:S.seq a_t) =
+          (ensures (is_sorted binrel (S.cons a seq)))
+let lemma_cons #a_t (binrel:t a_t) (a:a_t) (seq:S.seq a_t) =
   let open FStar.Classical in
+  let open Nemonuri.Squash in
   let sgt = S.singleton a in
   if S.length seq = 0 then begin
     S.lemma_empty seq;
@@ -159,9 +160,36 @@ let rec lemma_cons #a_t (binrel:t a_t) (a:a_t) (seq:S.seq a_t) =
     let coned_seq = S.cons a seq in
     lemma_cons_tail a seq;
     assert (S.tail coned_seq == seq);
+    let coni' x : a_t = S.index coned_seq x in
+    let seqi' x : a_t = S.index seq x in
+    let con_length = S.length coned_seq in
     let lemma_aux' a0 a1
-      : Lemma (is_sorted_in_at binrel coned_seq 0 (S.length coned_seq) a0 a1) =
-      admit ()
+      : Lemma (is_sorted_in_at binrel coned_seq 0 con_length a0 a1) =
+      if (not (a0 < a1)) then () else
+      let p_goal = (binrel (S.index coned_seq a0) (S.index coned_seq a1)) in
+      if (a0 = 0) then begin
+        assert (a1 >= 1);
+        let pred (ai:I.interval 1 con_length) : prop = (binrel (S.index coned_seq 0) (S.index coned_seq ai)) in
+        let lemma_first' () : Lemma (pred 1) =
+          prove ((S.index coned_seq 1) == (S.head seq)) (assert (binrel a (S.head seq)))
+        in
+        let lemma_trans' (ai:I.interval 1 con_length) 
+          : Lemma (requires (pred 1) /\ (ai > 1)) (ensures (pred ai)) =
+          prove ((S.index seq 0) == (S.index coned_seq 1)) (S.lemma_index_slice coned_seq 1 con_length 0);
+          assert (is_sorted_at binrel seq 0 (ai-1));
+          prove ((S.index seq (ai-1)) == (S.index coned_seq ai)) (S.lemma_index_slice coned_seq 1 con_length (ai-1));
+          assert (is_sorted_at binrel coned_seq 1 ai);
+          assert (is_transitive_at binrel (coni' 0) (coni' 1) (coni' ai))
+        in
+        if (a1 = 1) then prove p_goal (lemma_first' ())
+        else prove p_goal (assert (a1 > 1); lemma_first' (); lemma_trans' a1)
+      end else begin
+        assert (is_sorted_at binrel seq (a0-1) (a1-1));
+        S.lemma_index_slice coned_seq 1 con_length (a0-1);
+        S.lemma_index_slice coned_seq 1 con_length (a1-1);
+        prove p_goal (assert (is_sorted_at binrel coned_seq a0 a1))
+      end;
+      assert (p_goal)
     in
     lemma_aux' |> forall_intro_2
   end
